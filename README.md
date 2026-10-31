@@ -200,12 +200,13 @@ Activate the workflow and send the `curl` examples above to your production webh
 
 Pull requests are welcome. Please never commit real API keys or project URLs.
 
-## 📄 License
-
-MIT. See `LICENSE`.
-
 <div align="center">
-
-**Built by *Anukul-Chandra* ** · If this helped you, drop a ⭐
-
+### 👨‍💻 Built by **Anukul Chandra**
+ 
+[![GitHub](https://img.shields.io/badge/GitHub-Anukul--Chandra-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Anukul-Chandra)
+![Made with n8n](https://img.shields.io/badge/Made%20with-n8n-EA4B71?style=for-the-badge&logo=n8n&logoColor=white)
+![Made with Love](https://img.shields.io/badge/Made%20with-%E2%9D%A4%EF%B8%8F-red?style=for-the-badge)
+ 
+**If this project helped you, please drop a ⭐. It means a lot!**
+ 
 </div>
