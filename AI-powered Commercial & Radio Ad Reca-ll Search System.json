@@ -1,0 +1,464 @@
+{
+  "name": "AI-powered Commercial & Radio Ad Reca-ll Search System",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kwwqfcodcbzbyawnlyxe.supabase.co/rest/v1/search_logs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "put supabase api key"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer put supabase api key"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ original_query: $('Normalize Query1').item.json.query, corrected_query: $json.results.map(r => r.raw).join(' | '), terms: '', source: $('Normalize Query1').item.json.inputType, result_count: $json.count, matched: $json.matched }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "e2384461-52f6-4b21-9b2e-18c3e23e1ee1",
+      "name": "Log Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1712,
+        2048
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Code in JavaScript').item.json }];"
+      },
+      "id": "5288b288-c552-4194-8347-a9694bbad928",
+      "name": "Restore Results Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        2048
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ad-search",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "fb0f8583-64f6-4170-aba0-4736854a2e28",
+      "name": "Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        2032
+      ],
+      "webhookId": "c062f924-0def-4a33-836d-ba6479fdef0d"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\nconst raw = item.json || {};\nconst binary = item.binary || {};\n\nfunction deepFind(obj, key, depth = 0) {\n  if (depth > 8 || obj == null) return '';\n\n  if (typeof obj === 'string') {\n    try {\n      const parsed = JSON.parse(obj);\n      return deepFind(parsed, key, depth + 1);\n    } catch {\n      return '';\n    }\n  }\n\n  if (typeof obj !== 'object') return '';\n\n  if (\n    Object.prototype.hasOwnProperty.call(obj, key) &&\n    typeof obj[key] === 'string' &&\n    obj[key].trim().length > 0\n  ) {\n    return obj[key].trim();\n  }\n\n  for (const k of Object.keys(obj)) {\n    if (k === 'headers') continue;\n    const found = deepFind(obj[k], key, depth + 1);\n    if (found) return found;\n  }\n\n  return '';\n}\n\nconst query = deepFind(raw, 'query');\nconst audioBase64 = deepFind(raw, 'audio');\n\nconst binaryKey = Object.keys(binary)[0] || '';\nconst hasBinaryAudio = !!binaryKey;\n\nconst hasAudio = hasBinaryAudio || audioBase64.length > 0;\nconst hasText = query.length > 0;\n\nif (!hasAudio && !hasText) {\n  throw new Error(\n    'Request must include either a \"query\" field or an audio file. ' +\n    'Available JSON keys: ' + JSON.stringify(Object.keys(raw)) +\n    ' | Binary keys: ' + JSON.stringify(Object.keys(binary))\n  );\n}\n\nreturn [\n  {\n    json: {\n      type: hasAudio ? 'audio' : 'text',\n      hasAudio,\n      hasText,\n      query,\n      audioBase64,\n      binaryProperty: binaryKey\n    },\n    binary\n  }\n];"
+      },
+      "id": "447c3f7c-fe77-436f-9e96-4852a90791c5",
+      "name": "Detect Input Type1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -256,
+        2032
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a1e2b3c4-d5f6-4a1b-9c2d-3e4f5a6b7c8d",
+              "leftValue": "={{ $json.hasAudio }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b624bd5d-803c-4531-9a2d-d59c53b09a89",
+      "name": "Has Audio?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -32,
+        2032
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\nif (item.binary && Object.keys(item.binary).length > 0) {\n  return [item];\n}\n\nif (item.json.audioBase64) {\n  const buffer = Buffer.from(item.json.audioBase64, 'base64');\n\n  return [{\n    json: item.json,\n    binary: {\n      data: await this.helpers.prepareBinaryData(\n        buffer,\n        'audio.webm',\n        'audio/webm'\n      )\n    }\n  }];\n}\n\nthrow new Error(\"No binary audio or base64 audio found.\");"
+      },
+      "id": "66dc5c73-d40e-4c3a-acfd-43f342c869c0",
+      "name": "Prepare Audio Binary1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        1728
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer put openai api key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "gpt-4o-transcribe"
+            },
+            {
+              "name": "prompt",
+              "value": "This is a voice search query for a radio and TV station directory. Common words include: rock, country, jazz, pop, news, talk, gospel, classical, hits, oldies, sports, R&B, hip hop, Christian, Spanish, station names, city names, and call letters like WABC or KISS FM."
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "={{ $json.binaryProperty || Object.keys($binary)[0] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9585a948-44a8-44aa-a230-3763d369dead",
+      "name": "Transcribe Audio1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        432,
+        1728
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\nlet finalQuery = '';\n\nif (typeof item.json.text === 'string' && item.json.text.trim().length > 0) {\n  finalQuery = item.json.text.trim();\n} else if (typeof item.json.query === 'string' && item.json.query.trim().length > 0) {\n  finalQuery = item.json.query.trim();\n}\n\nif (!finalQuery) {\n  throw new Error('Could not resolve a search query from the provided input.');\n}\n\nconst sourceType = $('Detect Input Type1').item.json.type === 'audio' ? 'speech-to-text transcript (audio)' : 'direct search box text';\n\nreturn [{ json: { query: finalQuery, sourceType, inputType: $('Detect Input Type1').item.json.type } }];"
+      },
+      "id": "75717b49-2611-404d-aaf9-7c1093b82c06",
+      "name": "Normalize Query1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        2048
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Input source type: {{ $json.sourceType }}\nActual input text: \"{{ $json.query }}\"",
+        "options": {
+          "systemMessage": "=You are a query interpreter and search assistant for a radio and TV station directory system, connected to a database search tool called \"Search Station Database\".\n\nThe input text can come from two kinds of sources:\n1. A direct search box — usually short (single word, two words, or a short phrase). Treat as-is, only fix obvious typos, don't over-interpret.\n2. A speech-to-text transcript (from an uploaded audio file or live recording). May be a full sentence, contain filler words, hesitations, ASR (speech recognition) errors, or conversational phrasing — the real search intent is only implied as hints inside the sentence.\n\nWhen the source is a transcript:\n1. Correct spelling and ASR transcription errors, and normalize casual or spoken language into clear intent.\n2. Ignore filler/conversational noise — words like \"umm\", \"please\", \"can you find\", \"I want\", \"I think\", \"I used to listen to\" carry no search value.\n3. Infer implicit keywords from context even if they are not stated in isolation.\n\nIn all cases:\n1. Identify the most relevant search term likely to appear in a station's database record: format/genre (e.g. rock, country, news, talk, gospel), city, state/province/country, call letters, slogan or brand words, language, band (AM/FM), or frequency.\n2. Never invent details that are not present or reasonably implied in the input.\n3. If the input has no identifiable station-related keywords (e.g. it's just a greeting or unrelated chatter), do NOT call the search tool — simply reply that no relevant search terms were found in a short, friendly sentence.\n\nWhen valid search intent is found, call the \"Search Station Database\" tool, passing the cleaned/corrected search term as input.\n\nTHE TOOL ALREADY RETURNS A CLEAN, PRE-FORMATTED, HUMAN-READABLE RESULT. Your job after calling the tool is strictly a pass-through:\n- Take the tool's returned text output and relay it back to the user EXACTLY as received, character for character.\n- Do NOT summarize it.\n- Do NOT reformat it.\n- Do NOT omit any lines, stations, or entries.\n- Do NOT reorder it.\n- Do NOT add commentary, explanations, greetings, or extra sentences before or after it.\n- Do NOT convert it into markdown, bullet points, or any other format — leave it as plain text exactly as the tool gave it to you.\n\nIf the tool's output says no stations were found, relay that exact message back to the user, optionally rephrased into one short, polite sentence — this is the only case where you may adjust the tool's wording.\n\nIf you did not call the tool (because no valid search intent was found), respond only with a short, friendly sentence explaining that no relevant search terms were identified — do not fabricate any results.\n\nAlways respond in plain text only — no markdown, no JSON, no code fences."
+        }
+      },
+      "id": "2445fd22-4023-45d4-bf8a-8581244ce320",
+      "name": "AI Agent1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        880,
+        2048
+      ]
+    },
+    {
+      "parameters": {
+        "model": "grok-4.5",
+        "options": {}
+      },
+      "id": "a35a1161-4bc4-4f84-a4cc-030868fcf63d",
+      "name": "xAI Grok Chat Model1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatXAiGrok",
+      "typeVersion": 1,
+      "position": [
+        896,
+        2272
+      ],
+      "credentials": {
+        "xAiApi": {
+          "id": "ktgR0ek1y2gAvULm",
+          "name": "put xai api key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst summary = (item.json.output || '').trim() || 'Sorry, I could not process that request.';\nconst matched = !/no.*(match|found|station)|sorry.*(no|not.*find)/i.test(summary) || /\\bfound\\b/i.test(summary);\n\nreturn [{\n  json: {\n    success: true,\n    query: $('Normalize Query1').item.json.query,\n    summary,\n    matched\n  }\n}];"
+      },
+      "id": "8d828b37-698b-459e-a33c-cebc6fc1eef0",
+      "name": "Format Agent Output1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        2048
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "025ea77f-d50c-4ed9-8914-7be7554a00f2",
+      "name": "Send Response1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2144,
+        2080
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Search the radio/TV station directory database. Use this to find stations matching a keyword such as music format/genre, city, state, call letters, slogan, or phone number. Provide the search term as input.",
+        "jsCode": "// const searchTerm = query.trim();\n// if (!searchTerm) return \"No search term provided\";\n\n// const orFilter = `or=(Format.ilike.*${searchTerm}*,City.ilike.*${searchTerm}*,State.ilike.*${searchTerm}*,Calls.ilike.*${searchTerm}*,Slogan.ilike.*${searchTerm}*,Phone.ilike.*${searchTerm}*)`;\n// const url = `https://kwwqfcodcbzbyawnlyxe.supabase.co/rest/v1/Recall_Search?${orFilter}&select=*&limit=500`;\n\n// try {\n//   const response = await this.helpers.httpRequest({\n//     method: 'GET',\n//     url: url,\n//     headers: {\n//       'apikey': 'put supabase api key',\n//       'Authorization': 'Bearer put supabase api key',\n//       'Content-Type': 'application/json'\n//     },\n//     json: true\n//   });\n\n//   const data = response;\n//   if (!data || data.length === 0) return \"No stations found matching your search.\";\n//   return JSON.stringify(data);\n// } catch (error) {\n//   return `Error: ${error.message}`;\n// }\n\n\n\nconst searchTerm = query.trim();\n\nif (!searchTerm) return \"No search term provided\";\n\nconst orFilter = `or=(Format.ilike.*${searchTerm}*,City.ilike.*${searchTerm}*,State.ilike.*${searchTerm}*,Calls.ilike.*${searchTerm}*,Slogan.ilike.*${searchTerm}*,Phone.ilike.*${searchTerm}*)`;\n\nconst url = `https://kwwqfcodcbzbyawnlyxe.supabase.co/rest/v1/Recall_Search?${orFilter}&select=*&limit=500`;\n\ntry {\n\n  const response = await this.helpers.httpRequest({\n\n    method: 'GET',\n\n    url: url,\n\n    headers: {\n\n      'apikey': 'put supabase api key',\n\n      'Authorization': 'Bearer put supabase api key',\n\n      'Content-Type': 'application/json'\n\n    },\n\n    json: true\n\n  });\n\n  const data = response;\n\n  if (!data || data.length === 0) return \"No stations found matching your search.\";\n\n  // Helper: check if a value looks valid (not empty, not garbage)\n\n  const isValid = (val, type) => {\n\n    if (val === null || val === undefined) return false;\n\n    const str = String(val).trim();\n\n    if (str === '' || str.toUpperCase() === 'NULL') return false;\n\n    if (type === 'phone' && !/\\d{3}[-.]?\\d{3}[-.]?\\d{4}/.test(str)) return false;\n\n    if (type === 'calls' && /kw$/i.test(str)) return false; // power rating, not a call sign\n\n    if (type === 'city' && /^https?:\\/\\//i.test(str)) return false; // URL, not a city\n\n    return true;\n\n  };\n\n  const lines = data.map(row => {\n\n    const parts = [];\n\n    if (isValid(row['Calls'], 'calls')) parts.push(row['Calls']);\n\n    if (isValid(row['Format'])) parts.push(row['Format']);\n\n    if (isValid(row['City'], 'city')) parts.push(row['City']);\n\n    if (isValid(row['State'])) parts.push(row['State']);\n\n    if (isValid(row['Phone'], 'phone')) parts.push(row['Phone']);\n\n    return parts.length > 0 ? parts.join(', ') : null;\n\n  }).filter(line => line !== null);\n\n  if (lines.length === 0) return \"Found matching records, but the data was incomplete or invalid.\";\n\n  return `Found ${lines.length} matching station(s):\\n${lines.join('\\n')}`;\n\n} catch (error) {\n\n  return `Error: ${error.message}`;\n\n}\n\n"
+      },
+      "id": "9484adb2-dd96-4b7c-af43-0a61ef2e8946",
+      "name": "Search Station Database",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        1024,
+        2272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nlet rawSummary = (item.json.summary || '').trim();\n\n// Convert literal \"\\n\" (backslash + n text) into real newline characters\nrawSummary = rawSummary.replace(/\\\\n/g, '\\n');\n\nconst query = $('Normalize Query1').item.json.query;\n\n// Split into lines, remove empty lines\nlet lines = rawSummary\n  .split('\\n')\n  .map(l => l.trim())\n  .filter(l => l.length > 0);\n\n// Detect \"no results\" case\nconst firstLine = lines[0] || '';\nconst isNoResults = !/^found\\s+\\d+/i.test(firstLine);\n\nlet results = [];\nlet count = 0;\n\nif (!isNoResults) {\n  // Remove the header line (\"Found 9 matching station(s):\")\n  const dataLines = lines.slice(1);\n\n  results = dataLines.map(line => {\n    const parts = line.split(',').map(p => p.trim()).filter(p => p.length > 0);\n\n    return {\n      raw: line,\n      calls: parts[0] || null,\n      format: parts[1] || null,\n      city: parts[2] || null,\n      state: parts[3] || null,\n      phone: parts[4] || null\n    };\n  });\n\n  count = results.length;\n}\n\nreturn [{\n  json: {\n    success: true,\n    query,\n    matched: count > 0,\n    count,\n    results\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        2048
+      ],
+      "id": "55b5f241-f067-46ae-9460-b2e4249eb526",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Log Search": {
+      "main": [
+        [
+          {
+            "node": "Restore Results Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Results Data": {
+      "main": [
+        [
+          {
+            "node": "Send Response1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Detect Input Type1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Input Type1": {
+      "main": [
+        [
+          {
+            "node": "Has Audio?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Audio?1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audio Binary1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audio Binary1": {
+      "main": [
+        [
+          {
+            "node": "Transcribe Audio1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Audio1": {
+      "main": [
+        [
+          {
+            "node": "Normalize Query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Query1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Format Agent Output1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "xAI Grok Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Agent Output1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Station Database": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Log Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b4ccc8f6-2f6d-4cdb-9af9-bf3c3919b51d",
+  "meta": {
+    "instanceId": "f09f80ae50f33d9b67a1c6b4ef0f180a1c8e8290ed5aaeb90c28569fcfe58e2e"
+  },
+  "nodeGroups": [],
+  "id": "qfiUNDJs60AkvzuG",
+  "tags": []
+}
